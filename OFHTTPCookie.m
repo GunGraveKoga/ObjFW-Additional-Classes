@@ -325,8 +325,10 @@ void parseCookies(const char* lineptr, id dict) {
 
     void* _pool =objc_autoreleasePoolPush();
 
-    if ([cookies count] == 0)
+    if ([cookies count] == 0) {
+        objc_autoreleasePoolPop(_pool);
         @throw [OFInvalidArgumentException exception];
+    }
 
     version = [(OFHTTPCookie *)[cookies objectAtIndex:0] version];
 
@@ -337,24 +339,139 @@ void parseCookies(const char* lineptr, id dict) {
     OFString* str;
     for (OFHTTPCookie* cookie in cookies) {
         
-        str = [OFString stringWithFormat:@"%@=%@", [cookie name], [cookie value]];
+        str = [OFString stringWithFormat:@"%@=%@", cookie.name, cookie.value];
 
         if (field)
             field = [field stringByAppendingFormat:@"; %@", str];
         else
             field = str;
         
-        if (version && [cookie path])
-            field = [field stringByAppendingFormat:@"; $Path=\"%@\""];
+        if (version && cookie.path)
+            field = [field stringByAppendingFormat:@"; $Path=\"%@\"", cookie.path];
+
+        if (version && cookie.domain)
+            field = [field stringByAppendingFormat:@"; $Domain=\"%@\"", cookie.domain];
     }
 
-    OFDictionary* cookieField = [OFDictionary dictionaryWithObject:field forKey:@"Cookie"];
+    OFDictionary* cookieField;
+
+    if (version)
+        cookieField = [OFDictionary dictionaryWithObject:field forKey:@"Cookie2"];
+    else
+        cookieField = [OFDictionary dictionaryWithObject:field forKey:@"Cookie"];
+
 
     [cookieField retain];
     objc_autoreleasePoolPop(_pool);
 
     return [cookieField autorelease];
 
+}
+
++ (OFDictionary OF_GENERIC(OFString *,id) *) responseHeaderFieldsWithCookies: (OFArray OF_GENERIC(OFHTTPCookie *) *)cookies
+{
+    uint32_t version = 0;
+    OFString* field = nil;
+    OFString* key = nil;
+
+    void* _pool = objc_autoreleasePoolPush();
+
+    if ([cookies count] == 0) {
+        objc_autoreleasePoolPop(_pool);
+        @throw [OFInvalidArgumentException exception];
+    }
+
+    key = @"Set-Cookie";
+
+    version = [(OFHTTPCookie *)[cookies objectAtIndex:0] version];
+
+    if (version)
+        key = @"Set-Cookie2";
+
+    OFString* str;
+
+    for (OFHTTPCookie* cookie in cookies) {
+
+        str = [OFString stringWithFormat:@"%@=%@; Path=%@; Domain=%@", cookie.name, cookie.value, cookie.path, cookie.domain];
+
+        if (cookie.sessionOnly) {
+            str = [str stringByAppendingFormat:@"; %s", "Discard"];
+        } else {
+            OFDictionary* props = cookie.properties;
+
+            if (props[OFHTTPCookieMaximumAge] != nil) {
+                str = [str stringByAppendingFormat:@"; Max-Age=%@", props[OFHTTPCookieMaximumAge]];
+            } else {
+                OFDate* expDate = [cookie.expiresDate autorelease];
+                if (expDate != nil)
+                    str = [str stringByAppendingFormat:@"; Expires=%@", [expDate dateStringWithFormat: @"%a, %d %b %Y %H:%M:%S GMT"]];
+                else
+                    str = [str stringByAppendingFormat:@"; %s", "Discard"];
+            }
+
+        }
+
+        if (cookie.secure) {
+            str = [str stringByAppendingFormat:@"; %s", "Secure"];
+        } else {
+            if (cookie.HTTPOnly)
+                str = [str stringByAppendingFormat:@"; %s", "HttpOnly"];
+        }
+
+        if (version) {
+            OFArray* ports = [cookie.portList autorelease];
+
+            if ([ports count] > 0)
+                str = [str stringByAppendingFormat:@"Port=\""];
+
+            bool oneMore = false;
+            for (OFNumber* port in ports) {
+                
+                if (oneMore)
+                    str = [str stringByAppendingFormat:@",%hu", [port unsignedShortValue]];
+                else {
+                    str = [str stringByAppendingFormat:@"%hu", [port unsignedShortValue]];
+                    oneMore = true;
+                }
+            }
+
+            if ([ports count] > 0)
+                str = [str stringByAppendingFormat:@"\""];
+
+            OFString* cookieComment = cookie.comment;
+            OFURL* cookieUrlComment = cookie.commentURL;
+
+            if (cookieComment != nil) {
+                str = [str stringByAppendingFormat:@"; Comment=%@", cookieComment];
+                
+            }
+
+            if (cookieUrlComment != nil) {
+                str = [str stringByAppendingFormat:@"; CommentURL=%@", [cookieUrlComment string]];
+                
+            }
+
+            cookieComment = nil;
+            cookieUrlComment = nil;
+
+            str = [str stringByAppendingFormat:@"; Version=%d", cookie.version];
+        }
+
+        if (field)
+            field = [field stringByAppendingFormat:@", %@", str];
+        else
+            field = str;
+
+        str = nil;
+
+    }
+
+    OFDictionary* cookieField = [OFDictionary dictionaryWithObject:field forKey:key];
+
+    [cookieField retain];
+    objc_autoreleasePoolPop(_pool);
+
+    return [cookieField autorelease];
 }
 
 - (instancetype)init

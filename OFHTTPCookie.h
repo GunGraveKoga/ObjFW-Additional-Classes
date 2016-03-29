@@ -39,6 +39,7 @@ extern OFString * const OFHTTPCookieVersion; /** Obtain cookie version */
 
 + (instancetype) cookieWithProperties: (OFDictionary *)properties;
 + (OFDictionary OF_GENERIC(OFString *,id) *) requestHeaderFieldsWithCookies: (OFArray OF_GENERIC(OFHTTPCookie *) *)cookies;
++ (OFDictionary OF_GENERIC(OFString *,id) *) responseHeaderFieldsWithCookies: (OFArray OF_GENERIC(OFHTTPCookie *) *)cookies;
 + (OFArray OF_GENERIC(OFHTTPCookie *) *) cookiesWithResponseHeaderFields: (OFDictionary OF_GENERIC(OFString *,id) *)headerFields forURL: (OFURL *)url;
 - (instancetype) initWithProperties: (OFDictionary *)properties;
 
