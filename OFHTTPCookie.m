@@ -352,9 +352,8 @@ void parseCookies(const char* lineptr, id dict) {
 
     [cookieField retain];
     objc_autoreleasePoolPop(_pool);
-    [cookieField autorelease];
 
-    return cookieField;
+    return [cookieField autorelease];
 
 }
 
@@ -428,69 +427,78 @@ void parseCookies(const char* lineptr, id dict) {
 
 - (OFString *)comment 
 {
-    
-    return [[_properties objectForKey:OFHTTPCookieComment] copy];
+    OFString* comment_ = [[_properties objectForKey:OFHTTPCookieComment] copy];
+    return [comment_ autorelease];
 }
 
 - (OFURL *)commentURL
 {
     
-    if ([_properties objectForKey:OFHTTPCookieCommentURL])
-        return [[OFURL alloc] initWithString:[_properties objectForKey:OFHTTPCookieCommentURL]];
+    if ([_properties objectForKey:OFHTTPCookieCommentURL]) {
+        OFURL* commentURL_ = [[OFURL alloc] initWithString:[_properties objectForKey:OFHTTPCookieCommentURL]];
+        return [commentURL_ autorelease];
+    }
     else
         return nil;
 }
 
 - (OFString *)name
 {
-    
-    return [[_properties objectForKey:OFHTTPCookieName] copy];
+    OFString* name_ = [[_properties objectForKey:OFHTTPCookieName] copy];
+    return [name_ autorelease];
 }
 
 - (OFString *)domain 
 {
     
-    
-    return [[_properties objectForKey:OFHTTPCookieDomain] copy];
+    OFString* domain_ = [[_properties objectForKey:OFHTTPCookieDomain] copy];
+    return [domain_ autorelease];
 }
 
 - (OFDate *)expiresDate 
 {
-    
-    return [[_properties objectForKey:OFHTTPCookieExpires] copy];
+    OFDate* expiresDate_ = [[_properties objectForKey:OFHTTPCookieExpires] copy];
+    return [expiresDate_ autorelease];
 }
 
 - (OFString *)path
 {
-    
-    return [[_properties objectForKey:OFHTTPCookiePath] copy];
+    OFString* path_ = [[_properties objectForKey:OFHTTPCookiePath] copy];
+    return [path_ autorelease];
 }
 
 - (OFArray *)portList
 {
-    
+    void* _pool = objc_autoreleasePoolPush();
     OFArray* strPortList = [[_properties objectForKey:OFHTTPCookiePort] componentsSeparatedByString:@","];
     OFMutableArray* numPortList = [OFMutableArray array];
-    void* _pool = objc_autoreleasePoolPush();
+    
     for (OFString* port in strPortList) {
         @try {
             [numPortList addObject:[OFNumber numberWithUnsignedShort:(unsigned short)[port decimalValue]]];
         }@catch(id e) {}
     }
-    objc_autoreleasePoolPop(_pool);
+
     [numPortList makeImmutable];
-    return numPortList;
+
+    [numPortList retain];
+    objc_autoreleasePoolPop(_pool);
+    
+    return [numPortList autorelease];
 }
 
 - (OFDictionary *)properties 
 {
-    return [_properties copy];
+    OFDictionary* properties_ = [_properties copy];
+    return [properties_ autorelease];
 }
 
 - (OFString *)value 
 {
     
-    return [[_properties objectForKey:OFHTTPCookieValue] copy];
+    OFString* value_ = [[_properties objectForKey:OFHTTPCookieValue] copy];
+
+    return [value_ autorelease];
 }
 
 - (uint32_t)version 
