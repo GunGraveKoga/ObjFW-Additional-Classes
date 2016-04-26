@@ -6,3 +6,4 @@
 3. OFError - class for store information about errors (similar to NSError)
 4. OFUniversalException - exception class for lazy, gets exception name and exception message as initialization arguments
 5. OFDataArray class category with -initWithBytes:length: and +dataWithBytes:length: methods (similar to NSData class)
+6. OFUUID simple uuid v4 implementation, based on https://github.com/rxi/uuid4
