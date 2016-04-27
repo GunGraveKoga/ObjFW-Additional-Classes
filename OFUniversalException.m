@@ -1,10 +1,10 @@
 #import <ObjFW/ObjFW.h>
 #import "OFUniversalException.h"
 
-OFString *const kSourceFile = @"SourceFile";
-OFString *const kSourceFunction = @"SourceFunction";
-OFString *const kSourceLine = @"SourceLine";
-OFString *const kSourceClass = @"SourceClass";
+OFString *const kOFSourceFile = @"SourceFile";
+OFString *const kOFSourceFunction = @"SourceFunction";
+OFString *const kOFSourceLine = @"SourceLine";
+OFString *const kOFSourceClass = @"SourceClass";
 
 @interface OFUniversalException()
 
@@ -88,17 +88,17 @@ static bool __show_source_exception_info = false;
 		void* pool = objc_autoreleasePoolPush();
 
 		if (self.userInfo != nil) {
-			if (self.userInfo[kSourceClass])
-				[descriptionString appendFormat:@"<Class %@> ", self.userInfo[kSourceClass]];
+			if (self.userInfo[kOFSourceClass])
+				[descriptionString appendFormat:@"<Class %@> ", self.userInfo[kOFSourceClass]];
 
-			if (self.userInfo[kSourceFile])
-				[descriptionString appendFormat:@"%@", self.userInfo[kSourceFile]];
+			if (self.userInfo[kOFSourceFile])
+				[descriptionString appendFormat:@"%@", self.userInfo[kOFSourceFile]];
 
-			if (self.userInfo[kSourceFunction])
-				[descriptionString appendFormat:@"::%@", self.userInfo[kSourceFunction]]; 
+			if (self.userInfo[kOFSourceFunction])
+				[descriptionString appendFormat:@"::%@", self.userInfo[kOFSourceFunction]]; 
 
-			if (self.userInfo[kSourceLine])
-				[descriptionString appendFormat:@"[%@]", self.userInfo[kSourceFunction]];
+			if (self.userInfo[kOFSourceLine])
+				[descriptionString appendFormat:@"[%@]", self.userInfo[kOFSourceFunction]];
 		}
 
 		if ([descriptionString length] > 0)

@@ -11,10 +11,10 @@
 #define EXCEPTION_CONSTANT_EXPORT extern
 #endif
 
-EXCEPTION_CONSTANT_EXPORT OFString *const kSourceFile;
-EXCEPTION_CONSTANT_EXPORT OFString *const kSourceFunction;
-EXCEPTION_CONSTANT_EXPORT OFString *const kSourceLine;
-EXCEPTION_CONSTANT_EXPORT OFString *const kSourceClass;
+EXCEPTION_CONSTANT_EXPORT OFString *const kOFSourceFile;
+EXCEPTION_CONSTANT_EXPORT OFString *const kOFSourceFunction;
+EXCEPTION_CONSTANT_EXPORT OFString *const kOFSourceLine;
+EXCEPTION_CONSTANT_EXPORT OFString *const kOFSourceClass;
 
 @interface OFUniversalException: OFException
 {
