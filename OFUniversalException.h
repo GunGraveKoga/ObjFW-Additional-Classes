@@ -1,20 +1,16 @@
 #import <ObjFW/OFObject.h>
 #import <ObjFW/OFException.h>
+#import "objfwext_macros.h"
 
 @class OFString;
 @class OFConstantString;
 @class OFDictionary;
 
-#ifdef __cplusplus
-#define EXCEPTION_CONSTANT_EXPORT extern "C"
-#else
-#define EXCEPTION_CONSTANT_EXPORT extern
-#endif
 
-EXCEPTION_CONSTANT_EXPORT OFString *const kOFSourceFile;
-EXCEPTION_CONSTANT_EXPORT OFString *const kOFSourceFunction;
-EXCEPTION_CONSTANT_EXPORT OFString *const kOFSourceLine;
-EXCEPTION_CONSTANT_EXPORT OFString *const kOFSourceClass;
+OBJFW_EXTENSION_EXPORT OFString *const kOFSourceFile;
+OBJFW_EXTENSION_EXPORT OFString *const kOFSourceFunction;
+OBJFW_EXTENSION_EXPORT OFString *const kOFSourceLine;
+OBJFW_EXTENSION_EXPORT OFString *const kOFSourceClass;
 
 @interface OFUniversalException: OFException
 {
