@@ -21,6 +21,7 @@ endif
 endif
 
 OBJF_EXT_SOURCES = OFDataArray+WITHBYTES.m \
+					OFString+libiconv.m \
 					OFError.m \
 					OFHTTPCookie.m \
 					OFMD2Hash.m \
@@ -30,6 +31,7 @@ OBJF_EXT_SOURCES = OFDataArray+WITHBYTES.m \
 					OFUniversalException.m
 
 OBJF_EXT_OBJS = OFDataArray+WITHBYTES.lib.o \
+					OFString+libiconv.lib.o \
 					OFError.lib.o \
 					OFHTTPCookie.lib.o \
 					OFMD2Hash.lib.o \
@@ -42,6 +44,7 @@ OBJF_EXT_OBJS_LIST := $(addprefix $(build_dir)/,$(OBJF_EXT_OBJS))
 
 OBJF_EXT_PUBLIC_HEADERS = ObjFWExt.h objfwext_macros.h \
 						  OFDataArray+WITHBYTES.h \
+						  OFString+libiconv.h \
 						  OFError.h \
 						  OFHTTPCookie.h \
 						  OFMD2Hash.h \
@@ -112,7 +115,7 @@ $(OBJF_EXT): $(OBJF_EXT_OBJS_LIST)
 
 $(OBJF_EXT_OBJS_LIST): $(OBJF_EXT_SOURCES)
 	echo -e "\e[1;34mBuilding $(OBJF_EXT_LIB)...\e[0m"
-	$(CC) --builddir $(build_dir) $(OBJF_EXT_SOURCES) -I. -o $(OBJF_EXT) --lib 0.9 && \
+	$(CC) --builddir $(build_dir) $(OBJF_EXT_SOURCES) -I. -o $(OBJF_EXT) -liconv --lib 0.9 && \
 	$(MOVE) $(OBJF_EXT_LIB) $(build_dir)
 	$(MOVE_EXPORT_LIB)
 	echo -e "\e[1;34mDone.\e[0m"

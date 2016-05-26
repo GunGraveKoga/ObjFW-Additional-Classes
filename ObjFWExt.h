@@ -7,3 +7,4 @@
 #import "OFUUID.h"
 #import "OFUniversalException.h"
 #import "OFProcessInfo.h"
+#import "OFString+libiconv.h"
