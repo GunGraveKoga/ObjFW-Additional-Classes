@@ -46,7 +46,7 @@ static bool __show_source_exception_info = false;
 
 	self.name = name;
 
-	self.reason = [OFString stringWithFormat:frmt arguments:args];
+	self.reason = [[[OFString alloc] initWithFormat:frmt arguments:args] autorelease];
 
 	self.userInfo = userInfo;
 
