@@ -70,7 +70,7 @@ static bool __show_source_exception_info = false;
 
 + (instancetype)exceptionWithName:(OFString *)name format:(OFConstantString *)frmt arguments:(va_list)args
 {
-	return [[[self alloc] initWithFormat:frmt arguments:args] autorelease];
+	return [[[self alloc] initWithName:name format:frmt arguments:args] autorelease];
 }
 
 + (instancetype)exceptionWithName:(OFString *)name format:(OFConstantString *)frmt arguments:(va_list)args userInfo:(OFDictionary *)userInfo
@@ -98,7 +98,7 @@ static bool __show_source_exception_info = false;
 				[descriptionString appendFormat:@"::%@", self.userInfo[kOFSourceFunction]]; 
 
 			if (self.userInfo[kOFSourceLine])
-				[descriptionString appendFormat:@"[%@]", self.userInfo[kOFSourceFunction]];
+				[descriptionString appendFormat:@"[%@]", self.userInfo[kOFSourceLine]];
 		}
 
 		if ([descriptionString length] > 0)
