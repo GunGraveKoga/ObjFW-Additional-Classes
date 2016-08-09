@@ -8,3 +8,6 @@
 #import "OFUniversalException.h"
 #import "OFProcessInfo.h"
 #import "OFString+libiconv.h"
+#import "OFProcess+ExitCode.h"
+#import "OFDataArray+Search.h"
+#import "OFStdIOStream_Win32ANSIConsole.h"

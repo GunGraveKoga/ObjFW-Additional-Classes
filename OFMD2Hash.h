@@ -1,11 +1,11 @@
 #import <ObjFW/OFObject.h>
-#import <ObjFW/OFHash.h>
+#import <ObjFW/OFCryptoHash.h>
 #import <ObjFW/macros.h>
 
 
 OF_ASSUME_NONNULL_BEGIN
 
-@interface OFMD2Hash: OFObject<OFHash>
+@interface OFMD2Hash: OFObject<OFCryptoHash>
 {
 	uint8_t _state[48];
 	uint8_t _cksum[16];
