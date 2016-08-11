@@ -8,9 +8,9 @@ OFString *const kOFSourceClass = @"SourceClass";
 
 @interface OFUniversalException()
 
-@property(readwrite, copy)OFString* name;
-@property(readwrite, copy)OFString* reason;
-@property(readwrite, copy)OFDictionary* userInfo;
+@property(nonatomic, readwrite, copy)OFString* name;
+@property(nonatomic, readwrite, copy)OFString* reason;
+@property(nonatomic, readwrite, copy)OFDictionary* userInfo;
 
 @end
 

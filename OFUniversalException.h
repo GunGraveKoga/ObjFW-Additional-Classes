@@ -19,9 +19,9 @@ OBJFW_EXTENSION_EXPORT OFString *const kOFSourceClass;
 	OFDictionary* _userInfo;
 }
 
-@property(readonly, copy)OFString* name;
-@property(readonly, copy)OFString* reason;
-@property(readonly, copy)OFDictionary* userInfo;
+@property(nonatomic, readonly, copy)OFString* name;
+@property(nonatomic, readonly, copy)OFString* reason;
+@property(nonatomic, readonly, copy)OFDictionary* userInfo;
 
 - (instancetype)initWithName:(OFString *)name format:(OFConstantString *)frmt, ...;
 - (instancetype)initWithName:(OFString *)name format:(OFConstantString *)frmt arguments:(va_list)args;
