@@ -26,6 +26,7 @@
   of_ssh_auth_options_t _authOptions;
   of_ssh_host_hash_t _hostHashType;
   id<OFSSHSocketDelegate> _delegate;
+  BOOL _useCompression;
 
   LIBSSH2_SESSION* _session;
 }
@@ -38,6 +39,7 @@
 @synthesize publicKey = _publicKey;
 @synthesize privateKey = _privateKey;
 @synthesize delegate = _delegate;
+@synthesize useCompression = _useCompression;
 
 + (void)initialize
 {
@@ -67,6 +69,7 @@
   self.authOptions = 0;
   self.hostHashType = kSHA1Hash;
   self.delegate = nil;
+  self.useCompression = NO;
 
   return self;
 }
@@ -117,7 +120,9 @@
     [OFException raise:@"SSH connection failed" format:@"SSH session not initialized!"];
     }
 
-  libssh2_session_set_blocking(_session, 0);
+
+  libssh2_session_flag(self.session, LIBSSH2_FLAG_COMPRESS, self.useCompression ? 1 : 0);
+  libssh2_session_set_blocking(self.session, 0);
 
   int rc;
 
@@ -378,6 +383,10 @@
 @property (nonatomic) LIBSSH2_SFTP_HANDLE* sftpHandle;
 @property (nonatomic) BOOL isFileHandle;
 @property (nonatomic, assign) OFDataArray* buffer;
+@property (nonatomic) LIBSSH2_SFTP_ATTRIBUTES attributes;
+@property (nonatomic, copy, nullable) OFString* currentHandlePath;
+@property (nonatomic) of_sftp_file_mode_t currentHandleMode;
+@property (nonatomic) int currentHandlePermissions;
 
 @end
 
@@ -387,11 +396,19 @@
   LIBSSH2_SFTP_HANDLE* _sftpHandle;
   BOOL _isFileHandle;
   OFDataArray* _buffer;
+  OFString* _currentHandlePath;
+  of_sftp_file_mode_t _currentHandleMode;
+  int _currentHandlePermissions;
 }
 
 @synthesize sftpSession = _sftpSession;
 @synthesize sftpHandle = _sftpHandle;
 @synthesize isFileHandle = _isFileHandle;
+@synthesize buffer = _buffer;
+@synthesize currentHandlePath = _currentHandlePath;
+@synthesize currentHandleMode = _currentHandleMode;
+@synthesize currentHandlePermissions = _currentHandlePermissions;
+@dynamic attributes;
 
 - (instancetype)init
 {
@@ -401,12 +418,16 @@
   self.sftpHandle = NULL;
   self.isFileHandle = NO;
   self.buffer = nil;
+  self.currentHandlePath = nil;
+  self.currentHandleMode = 0;
+  self.currentHandlePermissions = 0;
 
   return self;
 }
 
 - (void)dealloc
 {
+  [_currentHandlePath release];
 
   [self close];
 
@@ -428,6 +449,75 @@
   [_buffer release];
 
   [super close];
+}
+
+- (void)setAttributes:(LIBSSH2_SFTP_ATTRIBUTES)attributes
+{
+    if (self.sftpHandle == NULL)
+        [OFException raise:@"Empty handle" format:@"SFTP handle is empty!"];
+
+    int rc = 0;
+
+    do {
+        rc = libssh2_sftp_fstat_ex(self.sftpHandle, &attributes, 1);
+
+        if (rc == 0)
+            break;
+        else if (rc == kEAgain)
+            [self _waitSocket];
+        else {
+            char* messageBuffer;
+            int messageLen = 0;
+
+            OFString* errorDescription = nil;
+
+            libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+
+            if (messageLen > 0) {
+                errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+              }
+
+            [OFException raise:@"SFTP Attributes setter failed" format:@"Cannot set SFTP handle attributes (%@)", errorDescription];
+
+        }
+
+    } while (true);
+}
+
+- (LIBSSH2_SFTP_ATTRIBUTES)attributes
+{
+    if (self.sftpHandle == NULL)
+        [OFException raise:@"Empty handle" format:@"SFTP handle of %@ is empty!", self];
+
+    LIBSSH2_SFTP_ATTRIBUTES attr;
+    int rc = 0;
+
+    do {
+        rc = libssh2_sftp_fstat_ex(self.sftpHandle, &attr, 0);
+
+        if (rc == 0)
+            break;
+        else if (rc == kEAgain)
+            [self _waitSocket];
+        else {
+            char* messageBuffer;
+            int messageLen = 0;
+
+            OFString* errorDescription = nil;
+
+            libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+
+            if (messageLen > 0) {
+                errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+              }
+
+            [OFException raise:@"SFTP Attributes getter failed" format:@"Cannot get SFTP handle attributes (%@)", errorDescription];
+
+        }
+
+    } while (true);
+
+    return attr;
 }
 
 - (void)connectToHost:(OFString *)host port:(uint16_t)port
@@ -618,12 +708,20 @@
 
 - (void)openDirectory:(OFString *)path
 {
+
+  if ([self.currentHandlePath isEqual:path])
+      return;
+
   if (self.sftpHandle != NULL) {
       libssh2_sftp_close_handle(self.sftpHandle);
 
       self.sftpHandle = NULL;
+      self.currentHandlePath = nil;
+      self.currentHandleMode = 0;
+      self.currentHandlePermissions = 0;
+
+      self.isFileHandle = NO;
     }
-  self.isFileHandle = NO;
 
   int rc = 0;
 
@@ -650,10 +748,16 @@
 
     } while (self.sftpHandle == NULL);
 
+  self.currentHandlePath = path;
+
 }
 
 - (void)openFile:(OFString *)file mode:(of_sftp_file_mode_t)mode rights:(int)rights
 {
+
+  if ([self.currentHandlePath isEqual:file] && (self.currentHandleMode == mode) && (self.currentHandlePermissions == rights))
+      return;
+
   if (self.sftpHandle != NULL) {
       if (self.buffer != nil) {
           [self lowlevelWriteBuffer:"" length:0];
@@ -663,9 +767,11 @@
       libssh2_sftp_close_handle(self.sftpHandle);
 
       self.sftpHandle = NULL;
+      self.isFileHandle = NO;
+      self.currentHandlePath = nil;
+      self.currentHandleMode = 0;
+      self.currentHandlePermissions = 0;
     }
-
-  self.isFileHandle = YES;
 
   int rc = 0;
 
@@ -692,29 +798,42 @@
 
     } while(self.sftpHandle == NULL);
 
+  self.isFileHandle = YES;
+  self.currentHandlePath = file;
+  self.currentHandleMode = mode;
+  self.currentHandlePermissions = rights;
+
 }
 
 - (void)createDirectoryAtPath:(OFString *)path rights:(int)rights
 {
   int rc = 0;
 
-  while ((rc = libssh2_sftp_mkdir_ex(self.sftpSession, path.UTF8String, path.UTF8StringLength, rights)) == kEAgain)
-    [self _waitSocket];
+  do {
+      rc = libssh2_sftp_mkdir_ex(self.sftpSession, path.UTF8String, path.UTF8StringLength, rights);
 
-  if (rc != kSuccess) {
-      char* messageBuffer;
-      int messageLen = 0;
+      if (rc == 0)
+          break;
+      else if (rc == kEAgain)
+          [self _waitSocket];
+      else {
+          char* messageBuffer;
+          int messageLen = 0;
 
-      OFString* errorDescription = nil;
+          OFString* errorDescription = nil;
 
-      libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+          libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
 
-      if (messageLen > 0) {
-          errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
-        }
+          if (messageLen > 0) {
+              errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+            }
 
-      [OFException raise:@"Directory creation failed" format:@"Cannot create directory at path %@ (%@)", path, errorDescription];
-    }
+          [OFException raise:@"Directory creation failed" format:@"Cannot create directory at path %@ (%@)", path, errorDescription];
+
+      }
+
+  } while (true);
+
 }
 
 - (OFArray<OFString*> *)contentOfDirectoryAtPath:(OFString *)path
@@ -771,6 +890,109 @@
   [content makeImmutable];
 
   return content;
+}
+
+- (of_offset_t)sizeOfFileAtPath:(OFString *)path
+{
+    [self openFile:path mode:kSFTPRead rights:0];
+
+    of_offset_t res = 0;
+
+    LIBSSH2_SFTP_ATTRIBUTES attr = self.attributes;
+
+    res += attr.filesize;
+
+    return res;
+
+}
+
+- (of_offset_t)sizeOfDirectoryAtPath:(OFString *)path
+{
+    [self openDirectory:path];
+
+    of_offset_t res = 0;
+
+    LIBSSH2_SFTP_ATTRIBUTES attr = self.attributes;
+
+    res += attr.filesize;
+
+    return res;
+}
+
+- (OFDate * _Nullable)accessTimeOfFileAtPath:(OFString * _Nonnull)path
+{
+    [self openFile:path mode:kSFTPRead rights:0];
+
+    OFDate* result = nil;
+
+    of_time_interval_t timeSince19970 = 0.0;
+
+    LIBSSH2_SFTP_ATTRIBUTES attr = self.attributes;
+
+    timeSince19970 += attr.atime;
+
+    if (timeSince19970 > 0.0)
+        result = [OFDate dateWithTimeIntervalSince1970:timeSince19970];
+
+
+    return result;
+}
+
+- (OFDate * _Nullable)modifiedTimeOfFileAtPath:(OFString * _Nonnull)path
+{
+    [self openFile:path mode:kSFTPRead rights:0];
+
+    OFDate* result = nil;
+
+    of_time_interval_t timeSince19970 = 0.0;
+
+    LIBSSH2_SFTP_ATTRIBUTES attr = self.attributes;
+
+    timeSince19970 += attr.mtime;
+
+    if (timeSince19970 > 0.0)
+        result = [OFDate dateWithTimeIntervalSince1970:timeSince19970];
+
+
+    return result;
+}
+
+- (OFDate * _Nullable)accessTimeOfDirectoryAtPath:(OFString * _Nonnull)path
+{
+    [self openDirectory:path];
+
+    OFDate* result = nil;
+
+    of_time_interval_t timeSince19970 = 0.0;
+
+    LIBSSH2_SFTP_ATTRIBUTES attr = self.attributes;
+
+    timeSince19970 += attr.atime;
+
+    if (timeSince19970 > 0.0)
+        result = [OFDate dateWithTimeIntervalSince1970:timeSince19970];
+
+
+    return result;
+}
+
+- (OFDate * _Nullable)modifiedTimeOfDirectoryAtPath:(OFString * _Nonnull)path
+{
+    [self openDirectory:path];
+
+    OFDate* result = nil;
+
+    of_time_interval_t timeSince19970 = 0.0;
+
+    LIBSSH2_SFTP_ATTRIBUTES attr = self.attributes;
+
+    timeSince19970 += attr.mtime;
+
+    if (timeSince19970 > 0.0)
+        result = [OFDate dateWithTimeIntervalSince1970:timeSince19970];
+
+
+    return result;
 }
 
 @end;

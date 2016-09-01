@@ -1,8 +1,10 @@
 #import <ObjFW/OFTCPSocket.h>
+#import <ObjFW/OFSeekableStream.h>
 #import "objfwext_macros.h"
 
 @class OFString;
 @class OFArray<ObjectType>;
+@class OFDate;
 @protocol OFSSHSocketDelegate;
 
 typedef OF_OPTIONS(int, of_ssh_auth_options_t) {
@@ -72,13 +74,14 @@ typedef OF_ENUM(int, of_ssh_error_t) {
 
 @interface OFSSHSocket: OFTCPSocket
 
-@property (nonatomic, copy)OFString* userName;
-@property (nonatomic, copy)OFString* password;
-@property (nonatomic, copy)OFString* publicKey;
-@property (nonatomic, copy)OFString* privateKey;
-@property (nonatomic, assign)id<OFSSHSocketDelegate> delegate;
+@property (nonatomic, null_unspecified, copy)OFString* userName;
+@property (nonatomic, null_unspecified, copy)OFString* password;
+@property (nonatomic, null_unspecified, copy)OFString* publicKey;
+@property (nonatomic, null_unspecified, copy)OFString* privateKey;
+@property (nonatomic, nullable, assign)id<OFSSHSocketDelegate> delegate;
 @property (nonatomic) of_ssh_auth_options_t authOptions;
 @property (nonatomic) of_ssh_host_hash_t hostHashType;
+@property (nonatomic) BOOL useCompression;
 
 @end
 
@@ -87,7 +90,7 @@ typedef OF_ENUM(int, of_ssh_error_t) {
 
 @optional
 
-- (BOOL)connection:(OFSSHSocket *)connection recivedHostKeyHash:(OFString * _Nullable)hash exception:(OFException * _Nullable)exception;
+- (BOOL)connection:(OFSSHSocket * _Nonnull)connection recivedHostKeyHash:(OFString * _Nullable)hash exception:(OFException * _Nullable)exception;
 
 @end
 
@@ -123,9 +126,15 @@ typedef OF_OPTIONS(unsigned long, of_sftp_file_mode_t) {
 
 @interface OFSFTPSocket: OFSSHSocket
 
-- (void)openFile:(OFString *)file mode:(of_sftp_file_mode_t)mode rights:(int)rights;
-- (void)openDirectory:(OFString *)path;
-- (void)createDirectoryAtPath:(OFString *)path rights:(int)rights;
-- (OFArray<OFString*> *)contentOfDirectoryAtPath:(OFString *)path;
+- (void)openFile:(OFString * _Nonnull)file mode:(of_sftp_file_mode_t)mode rights:(int)rights;
+- (void)openDirectory:(OFString * _Nonnull)path;
+- (void)createDirectoryAtPath:(OFString * _Nonnull)path rights:(int)rights;
+- (OFArray<OFString*> * _Nonnull)contentOfDirectoryAtPath:(OFString * _Nonnull)path;
+- (of_offset_t)sizeOfFileAtPath:(OFString * _Nonnull)path;
+- (of_offset_t)sizeOfDirectoryAtPath:(OFString * _Nonnull)path;
+- (OFDate * _Nullable)accessTimeOfFileAtPath:(OFString * _Nonnull)path;
+- (OFDate * _Nullable)modifiedTimeOfFileAtPath:(OFString * _Nonnull)path;
+- (OFDate * _Nullable)accessTimeOfDirectoryAtPath:(OFString * _Nonnull)path;
+- (OFDate * _Nullable)modifiedTimeOfDirectoryAtPath:(OFString * _Nonnull)path;
 
 @end
