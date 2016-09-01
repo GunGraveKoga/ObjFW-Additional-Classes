@@ -2,6 +2,7 @@
 #import "objfwext_macros.h"
 
 @class OFString;
+@class OFArray<ObjectType>;
 @protocol OFSSHSocketDelegate;
 
 typedef OF_OPTIONS(int, of_ssh_auth_options_t) {
@@ -125,5 +126,6 @@ typedef OF_OPTIONS(unsigned long, of_sftp_file_mode_t) {
 - (void)openFile:(OFString *)file mode:(of_sftp_file_mode_t)mode rights:(int)rights;
 - (void)openDirectory:(OFString *)path;
 - (void)createDirectoryAtPath:(OFString *)path rights:(int)rights;
+- (OFArray<OFString*> *)contentOfDirectoryAtPath:(OFString *)path;
 
 @end
