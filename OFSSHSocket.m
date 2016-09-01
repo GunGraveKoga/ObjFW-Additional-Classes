@@ -1,8 +1,10 @@
 #import <ObjFW/ObjFW.h>
+#import <ObjFW/socket.h>
 #import "OFSSHSocket.h"
 #import "OFUniversalException.h"
 
 #include <libssh2.h>
+#include <libssh2_sftp.h>
 
 @interface OFSSHSocket()
 
@@ -13,6 +15,7 @@
 - (void)_authWithPasswordAtHost:(OFString *)host;
 - (void)_authWitnKeyboardInteractiveAtHost:(OFString *)host;
 - (void)_authWithPublicKeyAtHost:(OFString *)host;
+- (int)_waitSocket;
 
 @end
 
@@ -168,6 +171,9 @@
 
   of_ssh_auth_options_t serverAuthOptions = [self _hostAuthTypes];
 
+  if (serverAuthOptions == 0)
+    serverAuthOptions = (kPassword | kKeyboardInteractive | kPublicKey);
+
   if ((serverAuthOptions & self.authOptions) == 0) {
       libssh2_session_free(self.session);
       [super close];
@@ -217,7 +223,11 @@
       [OFException raise:@"Invalid host key hash" format:@"Cannot recive host key hash! (%@)", errorDescription];
     }
 
-  return [OFString stringWithUTF8StringNoCopy:(char *)fingerprint freeWhenDone:false];
+  OFDataArray* fingerprintData = [OFDataArray dataArrayWithItemSize:sizeof (unsigned char) capacity:(self.hostHashType == kMD5Hash) ? 16 : 20];
+
+  [fingerprintData addItems:fingerprint count:(self.hostHashType == kMD5Hash) ? 16 : 20];
+
+  return fingerprintData.stringRepresentation;
 }
 
 - (of_ssh_auth_options_t)_hostAuthTypes
@@ -226,20 +236,12 @@
 
   char* userauthlist = NULL;
 
-  if ((userauthlist = libssh2_userauth_list(self.session, self.userName.UTF8String, self.userName.UTF8StringLength)) == NULL) {
-      char* messageBuffer;
-      int messageLen = 0;
+  int rc = 0;
 
-      OFString* errorDescription = nil;
+  while (((userauthlist = libssh2_userauth_list(self.session, self.userName.UTF8String, self.userName.UTF8StringLength)) == NULL) && ((rc = libssh2_session_last_errno(self.session)) == kEAgain));
 
-      libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
-
-      if (messageLen > 0) {
-          errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
-        }
-
-      [OFException raise:@"Empty user auth list" format:@"%@ recive empty user auth list (%@)", self, errorDescription];
-    }
+  if ((userauthlist == NULL) || rc != kSuccess)
+      return 0;
 
   @autoreleasepool {
     OFString* userAuthList = [OFString stringWithUTF8StringNoCopy:userauthlist freeWhenDone:false];
@@ -338,4 +340,256 @@
   OF_UNRECOGNIZED_SELECTOR
 }
 
+- (int)_waitSocket
+{
+  struct timeval timeout;
+  int rc;
+  fd_set fd;
+  fd_set *writefd = NULL;
+  fd_set *readfd = NULL;
+  int dir;
+
+  timeout.tv_sec = 10;
+  timeout.tv_usec = 0;
+
+  FD_ZERO(&fd);
+
+  FD_SET(self->_socket, &fd);
+
+  dir = libssh2_session_block_directions(self.session);
+
+  if (dir & LIBSSH2_SESSION_BLOCK_INBOUND)
+    readfd = &fd;
+
+  if (dir & LIBSSH2_SESSION_BLOCK_OUTBOUND)
+    writefd = &fd;
+
+  rc = select(self->_socket + 1, readfd, writefd, NULL, &timeout);
+
+  return rc;
+
+}
+
 @end
+
+
+@interface OFSFTPSocket()
+
+@property (nonatomic) LIBSSH2_SFTP* sftpSession;
+@property (nonatomic) LIBSSH2_SFTP_HANDLE* sftpHandle;
+@property (nonatomic) BOOL isFileHandle;
+@property (nonatomic, assign) OFDataArray* buffer;
+
+@end
+
+
+@implementation OFSFTPSocket{
+  LIBSSH2_SFTP* _sftpSession;
+  LIBSSH2_SFTP_HANDLE* _sftpHandle;
+  BOOL _isFileHandle;
+  OFDataArray* _buffer;
+}
+
+@synthesize sftpSession = _sftpSession;
+@synthesize sftpHandle = _sftpHandle;
+@synthesize isFileHandle = _isFileHandle;
+
+- (instancetype)init
+{
+  self = [super init];
+
+  self.sftpHandle = NULL;
+  self.sftpHandle = NULL;
+  self.isFileHandle = NO;
+  self.buffer = nil;
+
+  return self;
+}
+
+- (void)dealloc
+{
+  if (self.sftpHandle != NULL) {
+      libssh2_sftp_close_handle(self.sftpHandle);
+
+      self.sftpHandle = NULL;
+    }
+
+  [self close];
+
+  if (self.buffer != nil)
+    [self.buffer release];
+
+  [super dealloc];
+}
+
+- (void)connectToHost:(OFString *)host port:(uint16_t)port
+{
+  [super connectToHost:host port:port];
+
+  int rc = 0;
+
+  while (((self.sftpSession = libssh2_sftp_init(self.session)) == NULL) && ((rc = libssh2_session_last_errno(self.session)) == kEAgain))
+    [self _waitSocket];
+
+  if (rc != kSuccess) {
+      char* messageBuffer;
+      int messageLen = 0;
+
+      OFString* errorDescription = nil;
+
+      libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+
+      if (messageLen > 0) {
+          errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+        }
+
+      libssh2_session_free(self.session);
+      self.session = NULL;
+      [super close];
+
+      [OFException raise:@"SFTP initialization failed" format:@"Unable to init SFTP session!\n%@:%zu: %@", host, port, errorDescription];
+    }
+}
+
+- (void)lowlevelWriteBuffer:(const void *)buffer length:(size_t)length
+{
+  if ((self.sftpHandle == NULL) && (!self.isFileHandle)) {
+      [OFException raise:@"SFTP WriteFailed" format:@"Cannot write %zu bytes to %@ SFTP handle!", length, (self.sftpHandle == NULL) ? @"closed" : ((!self.isFileHandle) ? @"directory" : @"")];
+    }
+
+  size_t bytesToWrite = 0;
+  const char* ptr = NULL;
+  int rc = 0;
+
+  if (self.buffer != nil) {
+      if (self.buffer.count <= 0) {
+          [self.buffer release];
+          self.buffer = nil;
+
+        } else {
+
+          [self.buffer addItems:buffer count:length];
+
+          bytesToWrite = self.buffer.count;
+          ptr = (const char *)self.buffer.items;
+
+          do {
+              while ((rc = libssh2_sftp_write(self.sftpHandle, ptr, bytesToWrite)) == kEAgain)
+                [self _waitSocket];
+
+
+              if (rc > 0) {
+                ptr += rc;
+                bytesToWrite -= rc;
+              }
+
+              if (rc == 0)
+                break;
+
+            } while (rc >= 0);
+
+          if (rc < 0) {
+              char* messageBuffer;
+              int messageLen = 0;
+
+              OFString* errorDescription = nil;
+
+              libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+
+              if (messageLen > 0) {
+                  errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+                }
+
+              [OFException raise:@"SFTP WriteFailed" format:@"Cannot write %zu bytes to %@ (%@)", bytesToWrite, self, errorDescription];
+            }
+
+          if (bytesToWrite == 0) {
+              [self.buffer release];
+              self.buffer = nil;
+
+              return;
+
+            } else {
+              size_t bytesToRemove = self.buffer.count - bytesToWrite;
+
+              [self.buffer removeItemsInRange:of_range(0, bytesToRemove)];
+
+              return;
+            }
+
+        }
+    }
+
+  bytesToWrite = length;
+  ptr = (const char *)buffer;
+
+  do {
+      while ((rc = libssh2_sftp_write(self.sftpHandle, ptr, bytesToWrite)) == kEAgain)
+        [self _waitSocket];
+
+
+      if (rc > 0) {
+        ptr += rc;
+        bytesToWrite -= rc;
+      }
+
+      if (rc == 0)
+        break;
+
+    } while (rc >= 0);
+
+  if (rc < 0) {
+      char* messageBuffer;
+      int messageLen = 0;
+
+      OFString* errorDescription = nil;
+
+      libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+
+      if (messageLen > 0) {
+          errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+        }
+
+      [OFException raise:@"SFTP WriteFailed" format:@"Cannot write %zu bytes to %@ (%@)", bytesToWrite, self, errorDescription];
+    }
+
+  if (bytesToWrite > 0) {
+      self.buffer = [[OFDataArray alloc] initWithItemSize:sizeof(unsigned char) capacity:bytesToWrite];
+
+      [self.buffer addItems:(((unsigned char *)buffer) + (length - bytesToWrite)) count:bytesToWrite];
+    }
+}
+
+- (size_t)lowlevelReadIntoBuffer:(void *)buffer length:(size_t)length
+{
+  if ((self.sftpHandle == NULL) && (!self.isFileHandle)) {
+      [OFException raise:@"SFTP ReadFailed" format:@"Cannot read %zu bytes from %@ SFTP handle!", length, (self.sftpHandle == NULL) ? @"closed" : ((!self.isFileHandle) ? @"directory" : @"")];
+    }
+
+  int rc = 0;
+  size_t res = 0;
+
+  while ((rc = libssh2_sftp_read(self.sftpHandle, (char *)buffer, length)) == kEAgain)
+    [self _waitSocket];
+
+  if (rc < 0) {
+      char* messageBuffer;
+      int messageLen = 0;
+
+      OFString* errorDescription = nil;
+
+      libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+
+      if (messageLen > 0) {
+          errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+        }
+
+      [OFException raise:@"SFTP ReadFailed" format:@"Cannot read %zu bytes to %@ (%@)", length, self, errorDescription];
+    }
+
+  res += rc;
+
+  return res;
+}
+
+@end;

@@ -89,3 +89,16 @@ typedef OF_ENUM(int, of_ssh_error_t) {
 - (BOOL)connection:(OFSSHSocket *)connection recivedHostKeyHash:(OFString * _Nullable)hash exception:(OFException * _Nullable)exception;
 
 @end
+
+typedef OF_OPTIONS(unsigned long, of_sftp_access_mode_t) {
+    kSFTPRead = 0x00000001, //LIBSSH2_FXF_READ
+    kSFTPWrite = 0x00000002, //LIBSSH2_FXF_WRITE
+    kSFTPAppend = 0x00000004, //LIBSSH2_FXF_APPEND
+    kSFTPCreate = 0x00000008, //LIBSSH2_FXF_CREAT
+    kSFTPTruncade = 0x00000010, //LIBSSH2_FXF_TRUNC
+    kSFTPExclude = 0x00000020, //LIBSSH2_FXF_EXCL
+};
+
+@interface OFSFTPSocket: OFSSHSocket
+
+@end
