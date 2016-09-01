@@ -583,8 +583,10 @@
   int rc = 0;
   size_t res = 0;
 
+  char* tmp = (char*)__builtin_alloca(sizeof(char) * length);
+
   do {
-      rc = libssh2_sftp_read(self.sftpHandle, (char *)buffer, length);
+      rc = libssh2_sftp_read(self.sftpHandle, tmp, length);
 
       if (rc == kEAgain)
         [self _waitSocket];
@@ -606,16 +608,10 @@
         }
 
     } while (true);
-  of_log(@"lowlevel reading complite (%d)", rc);
+
   res += rc;
-  while (true) {
-      OFDataArray* dt = [OFDataArray dataArrayWithCapacity:rc];
-      [dt addItems:buffer count:rc];
-      of_log(@"%@", dt.stringRepresentation);
-      OFString* str = [OFString stringWithUTF16String:buffer];
-      of_log(@"str %@", str);
-      break;
-    }
+
+  memcpy(buffer, tmp, res);
 
   return res;
 }
