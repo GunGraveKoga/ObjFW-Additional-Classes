@@ -408,18 +408,27 @@
 
 - (void)dealloc
 {
-  if (self.sftpHandle != NULL) {
-      libssh2_sftp_close_handle(self.sftpHandle);
-
-      self.sftpHandle = NULL;
-    }
 
   [self close];
 
-  if (self.buffer != nil)
-    [self.buffer release];
-
   [super dealloc];
+}
+
+- (void)close
+{
+  if (self.sftpHandle != NULL) {
+      libssh2_sftp_close_handle(self.sftpHandle);
+      self.sftpHandle = NULL;
+    }
+
+  if (self.sftpSession != NULL) {
+      libssh2_sftp_shutdown(self.sftpSession);
+      self.sftpSession = NULL;
+    }
+
+  [_buffer release];
+
+  [super close];
 }
 
 - (void)connectToHost:(OFString *)host port:(uint16_t)port
@@ -590,6 +599,64 @@
   res += rc;
 
   return res;
+}
+
+- (void)openDirectory:(OFString *)path
+{
+  if (self.sftpHandle != NULL) {
+      libssh2_sftp_close_handle(self.sftpHandle);
+
+      self.sftpHandle = NULL;
+    }
+
+  int rc = 0;
+
+  while (((self.sftpHandle = libssh2_sftp_opendir(self.sftpSession, path.UTF8String)) == NULL) && ((rc = libssh2_session_last_errno(self.session)) == kEAgain))
+    [self _waitSocket];
+
+  if (rc != kSuccess) {
+      char* messageBuffer;
+      int messageLen = 0;
+
+      OFString* errorDescription = nil;
+
+      libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+
+      if (messageLen > 0) {
+          errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+        }
+
+      [OFException raise:@"Directory Open" format:@"Cannot open directory %@ (%@)", path, errorDescription];
+    }
+}
+
+- (void)openFile:(OFString *)file mode:(of_sftp_file_mode_t)mode rights:(int)rights
+{
+  if (self.sftpHandle != NULL) {
+      libssh2_sftp_close_handle(self.sftpHandle);
+
+      self.sftpHandle = NULL;
+    }
+
+  int rc = 0;
+
+  while (((self.sftpHandle = libssh2_sftp_open(self.sftpSession, file.UTF8String, mode, rights)) == NULL) && ((rc = libssh2_session_last_errno(self.session)) == kEAgain))
+    [self _waitSocket];
+
+  if (rc != kSuccess) {
+      char* messageBuffer;
+      int messageLen = 0;
+
+      OFString* errorDescription = nil;
+
+      libssh2_session_last_error(self.session, &messageBuffer, &messageLen, 1);
+
+      if (messageLen > 0) {
+          errorDescription = [OFString stringWithUTF8StringNoCopy:messageBuffer freeWhenDone:true];
+        }
+
+      [OFException raise:@"File Open" format:@"Cannot open file %@ (%@)", file, errorDescription];
+    }
 }
 
 @end;

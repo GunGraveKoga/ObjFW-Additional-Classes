@@ -90,7 +90,7 @@ typedef OF_ENUM(int, of_ssh_error_t) {
 
 @end
 
-typedef OF_OPTIONS(unsigned long, of_sftp_access_mode_t) {
+typedef OF_OPTIONS(unsigned long, of_sftp_file_mode_t) {
     kSFTPRead = 0x00000001, //LIBSSH2_FXF_READ
     kSFTPWrite = 0x00000002, //LIBSSH2_FXF_WRITE
     kSFTPAppend = 0x00000004, //LIBSSH2_FXF_APPEND
@@ -99,6 +99,31 @@ typedef OF_OPTIONS(unsigned long, of_sftp_access_mode_t) {
     kSFTPExclude = 0x00000020, //LIBSSH2_FXF_EXCL
 };
 
+#define OF_SFTP_S_IFMT         0170000     /* type of file mask */
+#define OF_SFTP_S_IFIFO        0010000     /* named pipe (fifo) */
+#define OF_SFTP_S_IFCHR        0020000     /* character special */
+#define OF_SFTP_S_IFDIR        0040000     /* directory */
+#define OF_SFTP_S_IFBLK        0060000     /* block special */
+#define OF_SFTP_S_IFREG        0100000     /* regular */
+#define OF_SFTP_S_IFLNK        0120000     /* symbolic link */
+#define OF_SFTP_S_IFSOCK       0140000     /* socket */
+#define OF_SFTP_S_IRWXU        0000700     /* RWX mask for owner */
+#define OF_SFTP_S_IRUSR        0000400     /* R for owner */
+#define OF_SFTP_S_IWUSR        0000200     /* W for owner */
+#define OF_SFTP_S_IXUSR        0000100     /* X for owner */
+#define OF_SFTP_S_IRWXG        0000070     /* RWX mask for group */
+#define OF_SFTP_S_IRGRP        0000040     /* R for group */
+#define OF_SFTP_S_IWGRP        0000020     /* W for group */
+#define OF_SFTP_S_IXGRP        0000010     /* X for group */
+#define OF_SFTP_S_IRWXO        0000007     /* RWX mask for other */
+#define OF_SFTP_S_IROTH        0000004     /* R for other */
+#define OF_SFTP_S_IWOTH        0000002     /* W for other */
+#define OF_SFTP_S_IXOTH        0000001     /* X for other */
+
 @interface OFSFTPSocket: OFSSHSocket
+
+- (void)openFile:(OFString *)file mode:(of_sftp_file_mode_t)mode rights:(int)rights;
+- (void)openDirectory:(OFString *)path;
+- (void)createDirectoryAtPath:(OFString *)path rights:(int)rights;
 
 @end
