@@ -613,7 +613,7 @@
       [dt addItems:buffer count:rc];
       of_log(@"%@", dt.stringRepresentation);
       OFString* str = [OFString stringWithUTF16String:buffer];
-      of_log(@"%@", str);
+      of_log(@"str %@", str);
       break;
     }
 
