@@ -19,59 +19,6 @@ typedef OF_ENUM(int, of_ssh_host_hash_t) {
     kSHA1Hash = 2,
 };
 
-typedef OF_ENUM(int, of_ssh_error_t) {
-    kSuccess = 0,
-    kSocketNoneError = -1,
-    kBannerReciveError = -2,
-    kBannerSendError = -3,
-    kInvalidMac = -4,
-    kKexFailure = -5,
-    kAllocError = -6,
-    kSocketSendError = -7,
-    kKeyExchangeFailure = -8,
-    kTimeoutError = -9,
-    kHostKeyInitError = -10,
-    kHostKeySignError = -11,
-    kDecryptError = -12,
-    kSocketDisconnect = -13,
-    kProtoError = -14,
-    kPasswordExpired = -15,
-    kFileError = -16,
-    kMethodNoneError = -17,
-    kAuthenticationFailed = -18,
-    kPublicKeyUnrecognized = -18,
-    kPublicKeyUnverified = -19,
-    kChanelOutOfOrderError = -20,
-    kChanelFailure = -21,
-    kChanelRequestDenied = -22,
-    kChanelUnknown = -23,
-    kChanelWindowExceeded = -24,
-    kChanelPacketExceeded = -25,
-    kChanelClosed = -26,
-    kChanelEOF = -27,
-    kSCPProtocolError = -28,
-    kZLibError = -29,
-    kSocketTimeoutError = -30,
-    kSFTPProtocolError = -31,
-    kRequestDenied = -32,
-    kMethodNotSupported = -33,
-    kInvalError = -34,
-    kInvalidPollType = -35,
-    kPublicKeyProtocolError = -36,
-    kEAgain = -37,
-    kBufferTooSmall = -38,
-    kBadUseError = -39,
-    kCompressError = -40,
-    kOutOfBoundary = -41,
-    kAgentProtocolError = -42,
-    kSocketReciveError = -43,
-    kEncryptError = -44,
-    kBadSocket = -45,
-    kKnownHost = -46,
-    kBannerNoneError = -2,
-};
-
-
 @interface OFSSHSocket: OFTCPSocket
 
 @property (nonatomic, null_unspecified, copy)OFString* userName;
@@ -124,17 +71,58 @@ typedef OF_OPTIONS(unsigned long, of_sftp_file_mode_t) {
 #define OF_SFTP_S_IWOTH        0000002     /* W for other */
 #define OF_SFTP_S_IXOTH        0000001     /* X for other */
 
+@class OFSFTPSocket;
+
+@interface OFSFTPRemoteFSEntry: OFObject
+
+@property (nonatomic, readonly) of_offset_t size;
+@property (nonatomic, readonly, nullable, copy) OFDate* lastAccessTime;
+@property (nonatomic, readonly, nullable, copy) OFDate* modifiedTime;
+@property (nonatomic, readonly) BOOL isDirectory;
+@property (nonatomic, readonly) BOOL isSymlink;
+@property (nonatomic, readonly, nonnull, copy) OFString* name;
+@property (nonatomic, readonly, nonnull, copy) OFString* path;
+@property (nonatomic, readonly) unsigned long uid;
+@property (nonatomic, readonly) unsigned long gid;
+@property (nonatomic, readonly) unsigned long permissions;
+
+@property (nonatomic) BOOL isOpened;
+@property (nonatomic, assign, readonly, nullable) OFSFTPSocket* source;
+
++ (OFSFTPRemoteFSEntry * _Nonnull)entry;
+- (void)open;
+- (void)close;
+- (void)remove;
+- (OFDataArray * _Nonnull)read;
+- (void)write:(OFDataArray * _Nonnull)data;
+- (void)append:(OFDataArray * _Nonnull)data;
+- (void)moveTo:(OFString * _Nonnull)path;
+- (void)copyTo:(OFString * _Nonnull)path;
+
+@end
+
 @interface OFSFTPSocket: OFSSHSocket
 
+@property (nonatomic, readonly) of_offset_t size;
+@property (nonatomic, readonly, nullable) OFDate* lastAccessTime;
+@property (nonatomic, readonly, nullable) OFDate* modifiedTime;
+
+- (OFSFTPRemoteFSEntry * _Nonnull)itemAtPath:(OFString * _Nonnull)path;
 - (void)openFile:(OFString * _Nonnull)file mode:(of_sftp_file_mode_t)mode rights:(int)rights;
 - (void)openDirectory:(OFString * _Nonnull)path;
 - (void)createDirectoryAtPath:(OFString * _Nonnull)path rights:(int)rights;
-- (OFArray<OFString*> * _Nonnull)contentOfDirectoryAtPath:(OFString * _Nonnull)path;
+- (OFArray<OFSFTPRemoteFSEntry*> * _Nonnull)contentOfDirectoryAtPath:(OFString * _Nonnull)path;
 - (of_offset_t)sizeOfFileAtPath:(OFString * _Nonnull)path;
 - (of_offset_t)sizeOfDirectoryAtPath:(OFString * _Nonnull)path;
 - (OFDate * _Nullable)accessTimeOfFileAtPath:(OFString * _Nonnull)path;
 - (OFDate * _Nullable)modifiedTimeOfFileAtPath:(OFString * _Nonnull)path;
 - (OFDate * _Nullable)accessTimeOfDirectoryAtPath:(OFString * _Nonnull)path;
 - (OFDate * _Nullable)modifiedTimeOfDirectoryAtPath:(OFString * _Nonnull)path;
+- (void)removeDirectoryAtPath:(OFString * _Nonnull)path;
+- (void)removeFileAtPath:(OFString * _Nonnull)path;
+- (void)remove;
+- (void)flush;
+- (void)moveItemAtPath:(OFString * _Nonnull)source toDestination:(OFString * _Nonnull)destination;
+- (void)copyItemAtPath:(OFString * _Nonnull)source toDestination:(OFString * _Nonnull)destination;
 
 @end
