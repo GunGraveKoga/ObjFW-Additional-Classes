@@ -486,7 +486,6 @@
   self.sftpHandle = NULL;
   self.isFileHandle = NO;
   self.buffer = nil;
-  self.readBuffer = nil;
   self.currentHandlePath = nil;
   self.currentHandleMode = 0;
   self.currentHandlePermissions = 0;
@@ -516,7 +515,6 @@
     }
 
   [_buffer release];
-  [_readBuffer release];
 
   [super close];
 }
