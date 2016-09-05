@@ -4,6 +4,13 @@
 
 #include <libssh2.h>
 #include <libssh2_sftp.h>
+#include <errno.h>
+
+#ifndef SFTP_MAX_PACKET_ZIZE
+    #define SFTP_MAX_PACKET_ZIZE (32 * 1024)
+#endif
+
+#define SFTP_READ_BUFFER_SIZE (0x4000)
 
 @interface OFSSHSocket()
 
@@ -123,7 +130,7 @@
 
 
   libssh2_session_flag(self.session, LIBSSH2_FLAG_COMPRESS, self.useCompression ? 1 : 0);
-  libssh2_session_set_blocking(self.session, 0);
+  libssh2_session_set_blocking(self.session, 1);
 
   int rc;
 
@@ -406,6 +413,7 @@
 - (void)_setAttributes:(LIBSSH2_SFTP_ATTRIBUTES)attributes forHandle:(LIBSSH2_SFTP_HANDLE * _Nonnull)handle;
 - (of_offset_t)_seekHandle:(LIBSSH2_SFTP_HANDLE * _Nonnull)handle toOffset:(of_offset_t)offset whence:(int)whence;
 - (void)_fsyncHandle:(LIBSSH2_SFTP_HANDLE * _Nonnull)handle;
+- (void)_createDirectory:(OFString * _Nonnull)directory withRights:(int)rights;
 
 @end
 
@@ -478,6 +486,7 @@
   self.sftpHandle = NULL;
   self.isFileHandle = NO;
   self.buffer = nil;
+  self.readBuffer = nil;
   self.currentHandlePath = nil;
   self.currentHandleMode = 0;
   self.currentHandlePermissions = 0;
@@ -507,6 +516,7 @@
     }
 
   [_buffer release];
+  [_readBuffer release];
 
   [super close];
 }
@@ -642,27 +652,25 @@
 {
   size_t res = 0;
   int rc = 0;
-  size_t bytesToRead = length;
-  char* tmp = (char *)__builtin_alloca(bytesToRead);
-  memset(tmp, 0, bytesToRead);
+
+  size_t bufferSize = (length < SFTP_READ_BUFFER_SIZE) ? length : SFTP_READ_BUFFER_SIZE;
+
   char* ptr = buffer;
 
   do {
-      rc = libssh2_sftp_read(handle, tmp, bytesToRead);
+      rc = libssh2_sftp_read(handle, ptr, bufferSize);
 
       if (rc == 0)
         break;
       else if (rc == LIBSSH2_ERROR_EAGAIN)
         [self _waitSocket];
       else if (rc > 0) {
-          memcpy(ptr, tmp, rc);
+
           ptr += rc;
-          bytesToRead -= rc;
           res += rc;
 
-          memset(tmp, 0, bytesToRead);
         } else {
-          [self _raiseLibSSHException:@"HandleReadError" description:[OFString stringWithFormat:@"Cannot read %zu bytes from SFTP handle", bytesToRead]];
+          [self _raiseLibSSHException:@"HandleReadError" description:[OFString stringWithFormat:@"Cannot read %zu bytes from SFTP handle", (length - res)]];
         }
 
     } while (true);
@@ -674,7 +682,7 @@
 - (size_t)lowlevelReadIntoBuffer:(void *)buffer length:(size_t)length
 {
   if ((self.sftpHandle == NULL) && (!self.isFileHandle)) {
-      [OFException raise:@"InvalidHandleError" format:@"Cannot write to %@ handle!", (self.sftpHandle == NULL) ? @"nullable" : ((!self.isFileHandle) ? @"directory" : @"invalid")];
+      [OFException raise:@"InvalidHandleError" format:@"Cannot read from %@ handle!", (self.sftpHandle == NULL) ? @"nullable" : ((!self.isFileHandle) ? @"directory" : @"invalid")];
     }
 
   size_t res = [self _readFromHandle:self.sftpHandle intoBuffer:(char *)buffer length:length];
@@ -848,20 +856,50 @@
 
 - (void)createDirectoryAtPath:(OFString *)path rights:(int)rights
 {
-  int rc = 0;
+    [self createDirectoryAtPath:path rights:rights createParents:NO];
+}
 
-  do {
-      rc = libssh2_sftp_mkdir_ex(self.sftpSession, path.UTF8String, path.UTF8StringLength, rights);
+- (void)createDirectoryAtPath:(OFString *)path rights:(int)rights createParents:(BOOL)createParents
+{
+    if (createParents) {
 
-      if (rc == 0)
-          break;
-      else if (rc == LIBSSH2_ERROR_EAGAIN)
-          [self _waitSocket];
-      else
-        [self _raiseLibSSHException:@"SFTPCreateDirectoryError" description:[OFString stringWithFormat:@"Cannot create directory at %@", path]];
+        @autoreleasepool {
+            OFArray<OFString*>* components = [path componentsSeparatedByString:@"/"];
 
-  } while (true);
+            OFString* relPath = nil;
 
+            for (OFString* component in components) {
+                if (relPath == nil)
+                    relPath = component;
+                else
+                    relPath = [@[relPath, component] componentsJoinedByString:@"/"];
+
+                if (![self directoryExistsAtPath:relPath])
+                    [self _createDirectory:relPath withRights:rights];
+
+            }
+        }
+
+    } else {
+        [self _createDirectory:path withRights:rights];
+    }
+}
+
+- (void)_createDirectory:(OFString * _Nonnull)directory withRights:(int)rights
+{
+    int rc = 0;
+
+    do {
+        rc = libssh2_sftp_mkdir_ex(self.sftpSession, directory.UTF8String, directory.UTF8StringLength, rights);
+
+        if (rc == 0)
+            break;
+        else if (rc == LIBSSH2_ERROR_EAGAIN)
+            [self _waitSocket];
+        else
+          [self _raiseLibSSHException:@"SFTPCreateDirectoryError" description:[OFString stringWithFormat:@"Cannot create directory at %@", directory]];
+
+    } while (true);
 }
 
 - (OFArray<OFSFTPRemoteFSEntry*> *)contentOfDirectoryAtPath:(OFString *)path
@@ -1319,6 +1357,189 @@
 - (void)copyItemAtPath:(OFString * _Nonnull)source toDestination:(OFString * _Nonnull)destination
 {
   OF_UNRECOGNIZED_SELECTOR
+}
+
+- (BOOL)fileExistsAtPath:(OFString * _Nonnull)path
+{
+    BOOL res = YES;
+    LIBSSH2_SFTP_HANDLE* handle = NULL;
+
+    @try {
+        handle = [self _openHandleAtPath:path flags:kSFTPRead mode:0 type:LIBSSH2_SFTP_OPENFILE];
+    } @catch (...) {
+        res = NO;
+        handle = NULL;
+    }
+
+    if (handle != NULL)
+        [self _closeHandle:handle];
+
+    return res;
+}
+
+- (BOOL)directoryExistsAtPath:(OFString * _Nonnull)path
+{
+    BOOL res = YES;
+    LIBSSH2_SFTP_HANDLE* handle = NULL;
+
+    @try {
+        handle = [self _openHandleAtPath:path flags:0 mode:0 type:LIBSSH2_SFTP_OPENDIR];
+    } @catch (...) {
+        res = NO;
+        handle = NULL;
+    }
+
+    if (handle != NULL)
+        [self _closeHandle:handle];
+
+    return res;
+}
+
+- (void)uploadItemAtLocalPath:(OFString * _Nonnull)localPath toRemoteDestination:(OFString * _Nonnull)destinationPath
+{
+    OFFileManager* fm = [OFFileManager defaultManager];
+
+    if ([fm fileExistsAtPath:localPath]) {
+
+        @autoreleasepool {
+
+            if ([self directoryExistsAtPath:destinationPath])
+                destinationPath = [@[destinationPath, localPath.lastPathComponent] componentsJoinedByString:@"/"];
+
+            if ([self fileExistsAtPath:destinationPath])
+                @throw [OFCopyItemFailedException exceptionWithSourcePath:localPath destinationPath:destinationPath errNo:EEXIST];
+
+            mode_t localFilePermissions = [fm permissionsOfItemAtPath:localPath];
+            unsigned long flags_ = (kSFTPRead | kSFTPWrite | kSFTPAppend | kSFTPCreate | kSFTPTruncade | kSFTPExclude);
+
+            LIBSSH2_SFTP_HANDLE* remoteFile = [self _openHandleAtPath:destinationPath flags:flags_ mode:localFilePermissions type:LIBSSH2_SFTP_OPENFILE];
+
+            OFFile* localFile = [OFFile fileWithPath:localPath mode:@"rb"];
+
+            size_t bytesToWrite = [fm sizeOfFileAtPath:localPath];
+            size_t chunkSize = (bytesToWrite < SFTP_MAX_PACKET_ZIZE) ? bytesToWrite : SFTP_MAX_PACKET_ZIZE;
+            size_t rc_l = 0;
+            size_t rc_r = 0;
+            char* buffer = (char *)__builtin_alloca(chunkSize);
+
+            do {
+                memset(buffer, 0, chunkSize);
+
+                rc_l = [localFile readIntoBuffer:buffer length:chunkSize];
+
+                do {
+
+                    rc_r = [self _writeToHandle:remoteFile fromBuffer:buffer length:rc_l];
+
+                    rc_l -= rc_r;
+
+                } while (rc_l > 0);
+
+                bytesToWrite -= rc_r;
+
+            } while (bytesToWrite > 0);
+
+            [self _closeHandle:remoteFile];
+            [localFile close];
+
+        }
+
+    } else if ([fm directoryExistsAtPath:localPath]) {
+
+        if ([self directoryExistsAtPath:destinationPath])
+            @throw [OFCopyItemFailedException exceptionWithSourcePath:localPath destinationPath:destinationPath errNo:EEXIST];
+
+        @autoreleasepool {
+            OFArray<OFString*>* content = [fm contentsOfDirectoryAtPath:localPath];
+            mode_t localDirectoryPermissions = [fm permissionsOfItemAtPath:localPath];
+
+            OFString* remoteDirectory = [@[destinationPath, localPath.lastPathComponent] componentsJoinedByString:@"/"];
+
+            [self createDirectoryAtPath:remoteDirectory rights:localDirectoryPermissions createParents:YES];
+
+            for (OFString* item in content) {
+                @autoreleasepool {
+                    [self uploadItemAtLocalPath:[localPath stringByAppendingPathComponent:item] toRemoteDestination:[@[remoteDirectory, item] componentsJoinedByString:@"/"]];
+                }
+            }
+        }
+
+    } else {
+        [OFCopyItemFailedException exceptionWithSourcePath:localPath destinationPath:destinationPath errNo:ENOENT];
+    }
+}
+
+- (void)downloadRemoteItemAtPath:(OFString * _Nonnull)remotePath toLocalPath:(OFString * _Nonnull)localDastination
+{
+    OFFileManager* fm = [OFFileManager defaultManager];
+
+    if ([self fileExistsAtPath:remotePath]) {
+
+        @autoreleasepool {
+
+            if ([fm directoryExistsAtPath:localDastination])
+                localDastination = [localDastination stringByAppendingPathComponent:remotePath.lastPathComponent];
+
+            if ([fm fileExistsAtPath:localDastination])
+                @throw [OFCopyItemFailedException exceptionWithSourcePath:remotePath destinationPath:localDastination errNo:EEXIST];
+
+            size_t bytesToRead = [self sizeOfFileAtPath:remotePath];
+            BOOL readTillTheEndOfStream = (bytesToRead > 0) ? NO : YES;
+            size_t rc = 0;
+            char* buffer = (char *)__builtin_alloca(4096);
+
+            OFFile* localFile = [OFFile fileWithPath:localDastination mode:@"wb"];
+            LIBSSH2_SFTP_HANDLE* remoteFile = [self _openHandleAtPath:remotePath flags:kSFTPRead mode:0 type:LIBSSH2_SFTP_OPENFILE];
+
+            BOOL stop = NO;
+
+            do {
+                memset(buffer, 0, 4096);
+
+                @try {
+                    rc = [self _readFromHandle:remoteFile intoBuffer:buffer length:4096];
+                }@catch (id e) {
+                    if (!readTillTheEndOfStream) {
+                        @throw e;
+                    }
+
+                    stop = YES;
+                }
+
+                [localFile writeBuffer:buffer length:rc];
+
+                bytesToRead -= rc;
+
+
+            } while ((!stop) && (bytesToRead > 0));
+
+            [self _closeHandle:remoteFile];
+            [localFile close];
+
+        }
+
+    } else if ([self directoryExistsAtPath:remotePath]) {
+
+        if ([fm directoryExistsAtPath:localDastination])
+            @throw [OFCopyItemFailedException exceptionWithSourcePath:remotePath destinationPath:localDastination errNo:EEXIST];
+
+        @autoreleasepool {
+            [fm createDirectoryAtPath:[localDastination stringByAppendingPathComponent:remotePath.lastPathComponent] createParents:true];
+
+            OFArray<OFSFTPRemoteFSEntry*>* content = [self contentOfDirectoryAtPath:remotePath];
+
+            for (OFSFTPRemoteFSEntry* item in content) {
+                @autoreleasepool {
+                    [self downloadRemoteItemAtPath:item.path toLocalPath:[localDastination stringByAppendingPathComponent:item.name]];
+
+                }
+            }
+
+        }
+
+    } else {
+        [OFCopyItemFailedException exceptionWithSourcePath:remotePath destinationPath:localDastination errNo:ENOENT];
+    }
 }
 
 @end;

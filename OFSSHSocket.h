@@ -111,6 +111,7 @@ typedef OF_OPTIONS(unsigned long, of_sftp_file_mode_t) {
 - (void)openFile:(OFString * _Nonnull)file mode:(of_sftp_file_mode_t)mode rights:(int)rights;
 - (void)openDirectory:(OFString * _Nonnull)path;
 - (void)createDirectoryAtPath:(OFString * _Nonnull)path rights:(int)rights;
+- (void)createDirectoryAtPath:(OFString * _Nonnull)path rights:(int)rights createParents:(BOOL)createParents;
 - (OFArray<OFSFTPRemoteFSEntry*> * _Nonnull)contentOfDirectoryAtPath:(OFString * _Nonnull)path;
 - (of_offset_t)sizeOfFileAtPath:(OFString * _Nonnull)path;
 - (of_offset_t)sizeOfDirectoryAtPath:(OFString * _Nonnull)path;
@@ -118,11 +119,15 @@ typedef OF_OPTIONS(unsigned long, of_sftp_file_mode_t) {
 - (OFDate * _Nullable)modifiedTimeOfFileAtPath:(OFString * _Nonnull)path;
 - (OFDate * _Nullable)accessTimeOfDirectoryAtPath:(OFString * _Nonnull)path;
 - (OFDate * _Nullable)modifiedTimeOfDirectoryAtPath:(OFString * _Nonnull)path;
+- (BOOL)fileExistsAtPath:(OFString * _Nonnull)path;
+- (BOOL)directoryExistsAtPath:(OFString * _Nonnull)path;
 - (void)removeDirectoryAtPath:(OFString * _Nonnull)path;
 - (void)removeFileAtPath:(OFString * _Nonnull)path;
 - (void)remove;
 - (void)flush;
 - (void)moveItemAtPath:(OFString * _Nonnull)source toDestination:(OFString * _Nonnull)destination;
 - (void)copyItemAtPath:(OFString * _Nonnull)source toDestination:(OFString * _Nonnull)destination;
+- (void)uploadItemAtLocalPath:(OFString * _Nonnull)localPath toRemoteDestination:(OFString * _Nonnull)destinationPath;
+- (void)downloadRemoteItemAtPath:(OFString * _Nonnull)remotePath toLocalPath:(OFString * _Nonnull)localDestination;
 
 @end
