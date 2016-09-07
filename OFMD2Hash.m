@@ -84,7 +84,7 @@ static void processBlock(uint8_t *state, uint8_t *cksum, uint32_t *buffer) {
 	return 16;
 }
 
-+ (instancetype)hash
++ (instancetype)cryptoHash
 {
 	return [[[self alloc] init] autorelease];
 }
@@ -96,6 +96,13 @@ static void processBlock(uint8_t *state, uint8_t *cksum, uint32_t *buffer) {
 	[self OF_resetState];
 
 	return self;
+}
+
+- (void)dealloc
+{
+  [self reset];
+
+  [super dealloc];
 }
 
 - (void)OF_resetState
@@ -111,7 +118,7 @@ static void processBlock(uint8_t *state, uint8_t *cksum, uint32_t *buffer) {
 	const uint8_t *buffer = buffer_;
 
 	if (_calculated)
-		@throw [OFHashAlreadyCalculatedException exceptionWithHash:self];
+		@throw [OFHashAlreadyCalculatedException exceptionWithObject:self];
 
 	_bits += (length * 8);
 	
@@ -159,6 +166,21 @@ static void processBlock(uint8_t *state, uint8_t *cksum, uint32_t *buffer) {
 	memcpy(_digest, _state, 16);
 
 	return (const uint8_t *)_digest;
+}
+
+- copy
+{
+  OFMD2Hash* copy = [[OFMD2Hash alloc] init];
+
+  memcpy(copy->_state, _state, sizeof(_state));
+  memcpy(copy->_cksum, _cksum, sizeof(_cksum));
+  memcpy(copy->_digest, _digest, sizeof(_digest));
+  copy->_bits = _bits;
+  memcpy(&copy->_buffer, &_buffer, sizeof(_buffer));
+  copy->_bufferLength = _bufferLength;
+  copy->_calculated = _calculated;
+
+  return copy;
 }
 
 - (void)reset

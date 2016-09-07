@@ -87,6 +87,7 @@ processBlock(uint32_t *state, uint32_t *buffer)
 }
 
 @implementation OFMD4Hash
+
 @synthesize calculated = _calculated;
 
 + (size_t)digestSize
@@ -99,7 +100,7 @@ processBlock(uint32_t *state, uint32_t *buffer)
 	return 64;
 }
 
-+ (instancetype)hash
++ (instancetype)cryptoHash
 {
 	return [[[self alloc] init] autorelease];
 }
@@ -111,6 +112,13 @@ processBlock(uint32_t *state, uint32_t *buffer)
 	[self OF_resetState];
 
 	return self;
+}
+
+- (void)dealloc
+{
+  [self reset];
+
+  [super dealloc];
 }
 
 - (void)OF_resetState
@@ -128,7 +136,7 @@ processBlock(uint32_t *state, uint32_t *buffer)
 
 	if (_calculated)
 		@throw [OFHashAlreadyCalculatedException
-		    exceptionWithHash: self];
+		    exceptionWithObject: self];
 
 	_bits += (length * 8);
 
@@ -173,6 +181,19 @@ processBlock(uint32_t *state, uint32_t *buffer)
 	_calculated = true;
 
 	return (const uint8_t*)_state;
+}
+
+- copy
+{
+  OFMD4Hash* copy = [[OFMD4Hash alloc] init];
+
+  memcpy(copy->_state, _state, sizeof(_state));
+  memcpy(&copy->_buffer, &_buffer, sizeof(_buffer));
+  copy->_bits = _bits;
+  copy->_bufferLength = _bufferLength;
+  copy->_calculated = _calculated;
+
+  return copy;
 }
 
 - (void)reset
