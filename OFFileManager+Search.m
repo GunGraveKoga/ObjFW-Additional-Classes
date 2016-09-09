@@ -121,10 +121,13 @@
 
     };
 
-    OFString* rootPath = path.stringByStandardizingPath;
+    OFString* rootPath = path;//.stringByStandardizingPath;
+    of_log(@"Root path: %@", rootPath);
 
-    if (![self directoryExistsAtPath:rootPath])
+    if (![self directoryExistsAtPath:rootPath]) {
+        of_log(@"RootPath does not exists");
       @throw [OFInvalidArgumentException exception];
+      }
 
     [[self contentsOfDirectoryAtPath:rootPath] enumerateObjectsUsingBlock:searchBlock];
 
