@@ -10,13 +10,17 @@ OFString *const OFErrorLineNumber = @"OFErrorLineNumber";
 
 @interface OFError()
 
-@property(readwrite)int32_t errorCode;
-@property(copy, readwrite)OFString* errorSource;
-@property(copy, readwrite)OFDictionary* userInfo;
+@property(nonatomic, readwrite)int32_t errorCode;
+@property(nonatomic, copy, readwrite)OFString* errorSource;
+@property(nonatomic, copy, readwrite)OFDictionary* userInfo;
 
 @end
 
-@implementation OFError
+@implementation OFError{
+    int32_t _errorCode;
+    OFString* _errorSource;
+    OFDictionary* _userInfo;
+}
 
 @synthesize errorCode = _errorCode;
 @synthesize errorSource = _errorSource;

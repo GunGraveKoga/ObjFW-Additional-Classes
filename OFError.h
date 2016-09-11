@@ -1,5 +1,7 @@
 #import <ObjFW/OFObject.h>
 
+OF_ASSUME_NONNULL_BEGIN
+
 @class OFString;
 @class OFDictionary;
 @class OFNumber;
@@ -13,20 +15,18 @@ extern OFString *const OFErrorFunction;
 extern OFString *const OFErrorLineNumber;
 
 @interface OFError: OFObject
-{
-	int32_t _errorCode;
-	OFString* _errorSource;
-	OFDictionary* _userInfo;
-}
 
-@property(readonly)int32_t errorCode;
-@property(copy, readonly)OFString* errorSource;
-@property(copy, readonly)OFDictionary* userInfo;
-@property(copy, readonly)OFString* file;
-@property(copy, readonly)OFString* function;
-@property(copy, readonly)OFNumber* line;
+@property(nonatomic, readonly)int32_t errorCode;
+@property(nonatomic, copy, readonly)OFString* errorSource;
+@property(nonatomic, copy, readonly)OFDictionary* userInfo;
+@property(nonatomic, copy, readonly)OFString* file;
+@property(nonatomic, copy, readonly)OFString* function;
+@property(nonatomic, copy, readonly)OFNumber* line;
 
-- (instancetype)initWithSource:(OFString *)source code:(int32_t)code userInfo:(OFDictionary *)userInfo;
-+ (instancetype)errorWithSource:(OFString *)source code:(int32_t)code userInfo:(OFDictionary *)userInfo;
+- (instancetype)initWithSource:(OFString *)source code:(int32_t)code userInfo:(OFDictionary * _Nullable)userInfo;
++ (instancetype)errorWithSource:(OFString *)source code:(int32_t)code userInfo:(OFDictionary * _Nullable)userInfo;
 
 @end
+
+
+OF_ASSUME_NONNULL_END
