@@ -1,6 +1,6 @@
 #import <ObjFW/OFObject.h>
 #import <ObjFW/OFException.h>
-#import <ObjFW/OFFile.h>
+#import <ObjFW/OFSeekableStream.h>
 
 #ifndef __BSDM_SMB_DEFS_H_
 //-----------------------------------------------------------------------------/
@@ -70,7 +70,6 @@
 @class OFArray<ObjectType>;
 @class OFSMBItem;
 @class OFDate;
-@class OFSMBFile;
 
 OF_ASSUME_NONNULL_BEGIN
 
@@ -94,8 +93,8 @@ OF_ASSUME_NONNULL_BEGIN
 - (void)deleteItemAtPath:(OFString *)path;
 - (void)createDirectoryAtPath:(OFString *)path;
 - (void)moveItemAtPath:(OFString *)source toPath:(OFString *)destination;
-- (OFSMBFile *)openFileAtPath:(OFString *)path mode:(uint32_t)mode;
 - (OFSMBItem * _Nullable)findItem:(OFString *)item atPath:(OFString *)path depth:(size_t)depth;
+- (void)dowloadFileAtPath:(OFString *)path processingBlock:(void(^)(void* buffer, size_t length))processingBlock;
 
 @end
 
@@ -131,10 +130,6 @@ OF_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithDSMError:(int)errorNumber;
 + (instancetype)exceptionWithDSMError:(int)errorNumber;
-
-@end
-
-@interface OFSMBFile: OFFile
 
 @end
 

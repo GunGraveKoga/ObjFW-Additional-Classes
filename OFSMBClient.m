@@ -43,16 +43,6 @@
 
 @end
 
-@interface OFSMBFile()
-
-@property (nonatomic, copy) OFSMBClient* sourceConnection;
-@property (nonatomic, readonly) smb_fd* fileDescriptor;
-@property (nonatomic) BOOL opened;
-
-- (instancetype)initWithSMBSession:(OFSMBClient *)session path:(OFString *)path mode:(uint32_t)mode;
-
-@end
-
 @implementation OFSMBClient{
     smb_session *_session;
     smb_tid _tid;
@@ -541,6 +531,9 @@
     depth--;
 
     for (OFSMBItem* part in [self contentsOfDirectoryAtPath:path.path]) {
+#if OBJFW_DSM_DEBUG
+        of_log(@"Search in %@", part.path);
+#endif
         searchItem = [self _findItem:item atPath:part depth:depth];
 
         if (searchItem)
@@ -577,8 +570,9 @@
 
         for (OFSMBItem* item in [self contentsOfDirectoryAtPath:searchPath.path]) {
             @autoreleasepool {
-
+#if OBJFW_DSM_DEBUG
                 of_log(@"Search in %@", item.path);
+#endif
                 result = [self _findItem:searchItem atPath:item depth:(depth - 1)];
 
                 if (result)
@@ -727,11 +721,64 @@
 #endif
 }
 
-- (OFSMBFile *)openFileAtPath:(OFString *)path mode:(uint32_t)mode
+- (void)dowloadFileAtPath:(OFString *)path processingBlock:(void(^)(void* buffer, size_t length))processingBlock
 {
-    OFSMBFile* file = [[OFSMBFile alloc] initWithSMBSession:self path:path mode:mode];
+#if !__has_feature(objc_arc)
+  void* pool = objc_autoreleasePoolPush();
+#endif
 
-    return [file autorelease];
+  OFSMBItem* item = [self itemAtPath:path];
+
+  if (item == nil) {
+#if !__has_extension(objc_arc)
+    objc_autoreleasePoolPop(pool);
+#endif
+    @throw [OFOpenItemFailedException exceptionWithPath:path errNo:ENOENT];
+  }
+
+  size_t bufferSize = 65535;
+  char* buffer = (char *)__builtin_alloca(bufferSize);
+  void* ptr = NULL;
+  size_t bytesToRead = item.size;
+  size_t rc = 0;
+
+  smb_fd fileID = 0;
+
+  smb_fopen(self.session, *(self.share), item.path.UTF8String, SMB_MOD_RO, &fileID);
+
+  if (!fileID) {
+#if !__has_extension(objc_arc)
+    [item retain];
+
+    objc_autoreleasePoolPop(pool);
+#endif
+    [item autorelease];
+
+    @throw [OFOpenItemFailedException exceptionWithPath:item.path];
+  }
+
+  do {
+      rc = smb_fread(self.session, fileID, (void *)buffer, bufferSize);
+
+      if (rc == -1) {
+#if !__has_extension(objc_arc)
+        objc_autoreleasePoolPop(pool);
+#endif
+        @throw [OFReadFailedException exceptionWithObject:self requestedLength:bufferSize];
+      }
+
+      ptr = buffer;
+      processingBlock(ptr, rc);
+      bytesToRead -= rc;
+      ptr = NULL;
+
+    } while (bytesToRead > 0);
+
+  smb_fclose(self.session, fileID);
+
+#if !__has_extension(objc_arc)
+  objc_autoreleasePoolPop(pool);
+#endif
 }
 
 @end
@@ -871,144 +918,3 @@
 
 @end
 
-
-@implementation OFSMBFile{
-    OFSMBClient* _sourceConnection;
-    smb_fd _fileDescriptor;
-    BOOL _opened;
-}
-
-@dynamic fileDescriptor;
-@synthesize sourceConnection = _sourceConnection;
-@synthesize opened = _opened;
-
-- (instancetype)initWithFileDescriptor:(int)fd
-{
-    (void)fd;
-    OF_UNRECOGNIZED_SELECTOR
-
-    OF_UNREACHABLE
-}
-
-- (instancetype)initWithSMBSession:(OFSMBClient *)session  path:(OFString *)path mode:(uint32_t)mode
-{
-    self = [super initWithFileDescriptor:-1];
-
-    self.sourceConnection = session;
-
-    int rc = 0;
-
-    rc = smb_fopen(self.sourceConnection.session, *(self.sourceConnection.share), path.UTF8String, mode, self.fileDescriptor);
-
-    if (rc == DSM_ERROR_NT)
-        rc = (int)smb_session_get_nt_status(self.sourceConnection.session);
-
-    if (rc != 0) {
-        [self release];
-
-        @throw [OFInitializationFailedException exceptionWithClass:[OFSMBFile class]];
-    }
-
-    self.opened = YES;
-
-    return self;
-}
-
-- (instancetype)initWithPath:(OFString *)path mode:(OFString *)mode
-{
-    (void)path;
-    (void)mode;
-    OF_UNRECOGNIZED_SELECTOR
-
-    OF_UNREACHABLE
-}
-
-- (void)close
-{
-    if (!self.opened)
-        return;
-
-    smb_fclose(self.sourceConnection.session, _fileDescriptor);
-
-    [super close];
-
-    self.opened = NO;
-}
-
-- (void)dealloc
-{
-    [self close];
-
-#if !__has_feature(objc_arc)
-    [_sourceConnection release];
-
-    [super dealloc];
-#endif
-}
-
-- (smb_fd *)fileDescriptor
-{
-    return &_fileDescriptor;
-}
-
-- (size_t)lowlevelReadIntoBuffer:(void *)buffer length:(size_t)length
-{
-    ssize_t rc = 0;
-
-    rc = smb_fread(self.sourceConnection.session, _fileDescriptor, buffer, length);
-
-    if (rc == -1) {
-        @throw [OFReadFailedException exceptionWithObject:self requestedLength:length];
-    }
-
-    return (size_t)rc;
-}
-
-- (void)lowlevelWriteBuffer:(const void *)buffer length:(size_t)length
-{
-    ssize_t rc = 0;
-
-    rc = smb_fwrite(self.sourceConnection.session, _fileDescriptor, (void *)buffer, length);
-
-    if (rc == -1){
-        @throw [OFWriteFailedException exceptionWithObject:self requestedLength:length];
-    }
-
-}
-
-- (of_offset_t)lowlevelSeekToOffset:(of_offset_t)offset whence:(int)whence
-{
-    if (whence == SEEK_END)
-        @throw [OFInvalidArgumentException exception];
-
-    return (of_offset_t)smb_fseek(self.sourceConnection.session, _fileDescriptor, (off_t)offset, (whence == SEEK_SET) ? SMB_SEEK_SET : SMB_SEEK_CUR);
-
-}
-
-- (int)fileDescriptorForReading
-{
-    return (int)_fileDescriptor;
-}
-
-- (int)fileDescriptorForWriting
-{
-    return (int)_fileDescriptor;
-}
-
-- (bool)lowlevelIsAtEndOfStream
-{
-    smb_stat stat = smb_stat_fd(self.sourceConnection.session, _fileDescriptor);
-
-    uint64_t size = smb_stat_get(stat, SMB_STAT_SIZE);
-
-    smb_stat_destroy(stat);
-
-    of_offset_t currentOffset = [self lowlevelSeekToOffset:0 whence:SEEK_CUR];
-
-    if (currentOffset < size)
-        return false;
-
-    return true;
-}
-
-@end
