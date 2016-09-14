@@ -1,7 +1,6 @@
 #import "objfwext_macros.h"
 #import "OFDataArray+WITHBYTES.h"
 #import "OFError.h"
-#import "OFHTTPCookie.h"
 #import "OFMD2Hash.h"
 #import "OFMD4Hash.h"
 #import "OFUUID.h"

@@ -226,6 +226,7 @@
     OFString *share;
 
     OFArray<OFString*> *urlPathComponents = url.path.pathComponents;
+
     _shares = [[OFMutableArray alloc] init];
     _currentShare = nil;
     self.shareOpened = NO;
@@ -236,24 +237,25 @@
             share = [OFString stringWithUTF8StringNoCopy:shares[idx] freeWhenDone:true];
             [_shares addObject:share];
 
-            if ((url.path == nil) || (url.path.length <= 0))
+            if ((url.path == nil) || (url.path.length <= 0) || ([url.path isEqual:@"/"]))
                 continue;
 
-            if ([urlPathComponents[0] caseInsensitiveCompare:share] == OF_ORDERED_SAME) {
+
+            if ([urlPathComponents[1] caseInsensitiveCompare:share] == OF_ORDERED_SAME) {
+
                 @try {
                     self.currentShare = share;
 
                 } @catch(...) {
-
+                  break;
                 } @finally {
                     connected = self.shareOpened;
-                    break;
                 }
 
             }
         }
     }
-    if ((url.path == nil) || (url.path.length <= 0))
+    if ((url.path == nil) || (url.path.length <= 0) || ([url.path isEqual:@"/"]))
         connected = YES;
 
     if (!connected) {
@@ -349,6 +351,7 @@
 
             if (rc == DSM_ERROR_NT)
                 rc = (int)smb_session_get_nt_status(self.session);
+
 
             @throw [OFSMBErrorException exceptionWithDSMError:rc];
         }
